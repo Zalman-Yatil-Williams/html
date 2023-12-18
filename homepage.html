@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Description</title>
+    <style>
+        body 
+        {
+            margin: 0;
+            padding: 0;
+            background: url('https://moewalls.com/wp-content/uploads/2023/06/ichigo-vs-ulquiorra-final-fight-bleach-thumb.jpg') no-repeat center center fixed;
+            background-size: cover;
+            font-family: 'Arial', sans-serif;
+            color: #fff;
+        }
+
+        #container 
+        {
+            max-width: 800px;
+            margin: 50px auto;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        #map 
+        {
+            height: 400px;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        #description 
+        {
+            margin-top: 10px;
+            font-size: 16px;
+        }
+
+        label 
+        {
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"] 
+        {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+
+        #buttons-container 
+        {
+            display: flex;
+            flex-wrap: wrap; 
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            margin-bottom: 10px;
+        }
+
+        #get-description-button,
+        #first-person-button {
+            width: calc(48% - 5px); 
+            background-color: #00ced1;
+            color: white;
+            padding: 10px;
+            font-size: 14px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 10px; 
+        }
+
+        #get-description-button:hover,
+        #first-person-button:hover {
+            background-color: #20b2aa;
+        }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <h1>API Description Project.</h1>
+
+    <div id="buttons-container">
+        <input type="text" id="locationInput" placeholder="Example... Corozal">
+        <button id="get-description-button">Get Description</button>
+        <button id="first-person-button">Switch to First Person</button>
+    </div>
+
+    <div id="map"></div>
+    <div id="description"></div>
+</div>
+
+<script>
+
+const googleMapsApiKey = 'AIzaSyDWEhzw_6YHMpEPZG_XM9UfZDU6HcksZvY';
+const chatGptApiKey = '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';
+
+let map;
+let marker;
+let streetViewService;
+
+const script = document.createElement('script');
+script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyDWEhzw_6YHMpEPZG_XM9UfZDU6HcksZvY&callback=initMap`;
+script.defer = true;
+document.head.appendChild(script);
+
+function initMap() {
+    map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 18.3920, lng: -88.3886 }, // Corozal, Belize
+        zoom: 12,
+    });
+
+    marker = new google.maps.Marker({
+        position: { lat: 18.3920, lng: -88.3886 }, // Corozal, Belize
+        map: map,
+    });
+
+    streetViewService = new google.maps.StreetViewService();
+
+    document.getElementById('get-description-button').addEventListener('click', searchLocation);
+    document.getElementById('first-person-button').addEventListener('click', switchToFirstPerson);
+}
+
+function switchToFirstPerson() {
+    const coordinates = marker.getPosition();
+    showFirstPersonView(coordinates);
+}
+
+function showFirstPersonView(coordinates) {
+    streetViewService.getPanorama({ location: coordinates, radius: 50 }, (data, status) => {
+        if (status === 'OK') {
+            const panorama = new google.maps.StreetViewPanorama(document.getElementById('map'), {
+                position: data.location.latLng,
+                pov: { heading: 0, pitch: 0 },
+                zoom: 1,
+            });
+
+            map.setStreetView(panorama);
+        } else {
+            console.error('Street View data not available for this location.');
+        }
+    });
+}
+
+async function searchLocation() {
+    const locationInput = document.getElementById('locationInput').value;
+    const descriptionElement = document.getElementById('description');
+
+    if (locationInput.trim() === '') {
+        descriptionElement.innerText = 'Please enter a location.';
+        return;
+    }
+
+    try {
+        const coordinates = await getCoordinates(locationInput);
+        setMapLocation(coordinates);
+
+        const description = await getDescription(locationInput);
+
+        descriptionElement.innerText = `Description of ${locationInput}: ${description}`;
+    } catch (error) {
+        console.error(error.message);
+        descriptionElement.innerText = 'Error getting description.';
+    }
+}
+
+async function getCoordinates(locationName) {
+    try {
+        const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(locationName)}&key=AIzaSyDWEhzw_6YHMpEPZG_XM9UfZDU6HcksZvY`);
+        const data = await response.json();
+
+        if (data.results && data.results.length > 0 && data.results[0].geometry && data.results[0].geometry.location) {
+            return data.results[0].geometry.location;
+        } else {
+            throw new Error('Could not determine coordinates for the location.');
+        }
+    } catch (error) {
+        throw new Error('Error getting coordinates: ' + error.message);
+    }
+}
+
+function setMapLocation(coordinates) {
+    map.setCenter(coordinates);
+    marker.setPosition(coordinates);
+}
+
+async function getDescription(locationName) {
+    try {
+        const response = await fetch(`https://api.openai.com/v1/engines/text-davinci-003/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${chatGptApiKey}`,
+            },
+            body: JSON.stringify({
+                prompt: `Describe ${locationName}`,
+                max_tokens: 50,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (data.choices && Array.isArray(data.choices) && data.choices.length > 0 && data.choices[0].text) {
+            return data.choices[0].text.trim();
+        } else {
+            throw new Error('No description available.');
+        }
+    } catch (error) {
+        throw new Error('Error getting description: ' + error.message);
+    }
+}
+
+
+</script>
+
+</body>
+</html>
